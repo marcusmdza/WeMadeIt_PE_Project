@@ -3,7 +3,7 @@ import io
 import logging
 
 from flask import Blueprint, jsonify, request
-from peewee import DatabaseError, DoesNotExist, chunked
+from peewee import DoesNotExist, IntegrityError, InterfaceError, OperationalError, chunked
 from playhouse.shortcuts import model_to_dict
 
 from app.database import db
@@ -11,6 +11,8 @@ from app.models.user import User
 
 users_bp = Blueprint("users", __name__)
 logger = logging.getLogger(__name__)
+
+_DB_ERRORS = (OperationalError, InterfaceError)
 
 
 def _unavailable():
@@ -29,7 +31,7 @@ def list_users():
             query = query.limit(per_page).offset(offset)
 
         return jsonify([model_to_dict(u, backrefs=False) for u in query]), 200
-    except DatabaseError:
+    except _DB_ERRORS:
         logger.exception("Database error in GET /users")
         return _unavailable()
 
@@ -40,7 +42,7 @@ def get_user(user_id):
         user = User.get_by_id(user_id)
     except DoesNotExist:
         return jsonify({"error": "User not found"}), 404
-    except DatabaseError:
+    except _DB_ERRORS:
         logger.exception("Database error in GET /users/%s", user_id)
         return _unavailable()
     return jsonify(model_to_dict(user, backrefs=False)), 200
@@ -59,7 +61,9 @@ def create_user():
 
     try:
         user = User.create(username=username, email=email)
-    except DatabaseError:
+    except IntegrityError:
+        return jsonify({"error": "A user with that username or email already exists"}), 409
+    except _DB_ERRORS:
         logger.exception("Database error in POST /users")
         return _unavailable()
 
@@ -72,7 +76,7 @@ def update_user(user_id):
         user = User.get_by_id(user_id)
     except DoesNotExist:
         return jsonify({"error": "User not found"}), 404
-    except DatabaseError:
+    except _DB_ERRORS:
         logger.exception("Database error in PUT /users/%s", user_id)
         return _unavailable()
 
@@ -83,7 +87,9 @@ def update_user(user_id):
         if "email" in data:
             user.email = data["email"]
         user.save()
-    except DatabaseError:
+    except IntegrityError:
+        return jsonify({"error": "A user with that username or email already exists"}), 409
+    except _DB_ERRORS:
         logger.exception("Database error saving PUT /users/%s", user_id)
         return _unavailable()
 
@@ -96,13 +102,13 @@ def delete_user(user_id):
         user = User.get_by_id(user_id)
     except DoesNotExist:
         return jsonify({"error": "User not found"}), 404
-    except DatabaseError:
+    except _DB_ERRORS:
         logger.exception("Database error in DELETE /users/%s", user_id)
         return _unavailable()
 
     try:
         user.delete_instance()
-    except DatabaseError:
+    except _DB_ERRORS:
         logger.exception("Database error deleting /users/%s", user_id)
         return _unavailable()
 
@@ -129,7 +135,9 @@ def bulk_load_users():
         with db.atomic():
             for batch in chunked(rows, 100):
                 User.insert_many(batch).execute()
-    except DatabaseError:
+    except IntegrityError:
+        return jsonify({"error": "Duplicate username or email in CSV"}), 409
+    except _DB_ERRORS:
         logger.exception("Database error in POST /users/bulk")
         return _unavailable()
 

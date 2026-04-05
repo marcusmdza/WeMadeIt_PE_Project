@@ -5,7 +5,7 @@ import random
 import string
 
 from flask import Blueprint, jsonify, redirect, request
-from peewee import DatabaseError, DoesNotExist, IntegrityError
+from peewee import DoesNotExist, IntegrityError, InterfaceError, OperationalError
 from playhouse.shortcuts import model_to_dict
 
 from app.cache import cache_url, get_cached_url, invalidate_url
@@ -14,6 +14,8 @@ from app.models.url import ShortenedURL
 
 urls_bp = Blueprint("urls", __name__)
 logger = logging.getLogger(__name__)
+
+_DB_ERRORS = (OperationalError, InterfaceError)
 
 
 def _unavailable():
@@ -25,21 +27,15 @@ def _generate_short_code(length=6):
     return "".join(random.choices(chars, k=length))
 
 
-@urls_bp.route("/shorten", methods=["POST"])
-def shorten():
-    data = request.get_json(silent=True) or {}
-    original_url = data.get("url", "").strip()
-
+def _create_url(original_url, title=None, user_id=None):
+    """Shared logic for POST /shorten and POST /urls. Returns (url_record, error_response)."""
     if not original_url:
-        return jsonify({"error": "URL is required"}), 400
+        return None, (jsonify({"error": "URL is required"}), 400)
     if not original_url.startswith(("http://", "https://")):
-        return jsonify({"error": "URL must start with http:// or https://"}), 400
+        return None, (jsonify({"error": "URL must start with http:// or https://"}), 400)
 
-    title = data.get("title")
-    user_id = data.get("user_id")
-
+    url_record = None
     try:
-        url_record = None
         for _ in range(3):
             short_code = _generate_short_code()
             try:
@@ -54,18 +50,38 @@ def shorten():
                 continue
 
         if url_record is None:
-            return jsonify({"error": "Failed to generate a unique short code, please retry"}), 500
+            return None, (jsonify({"error": "Failed to generate a unique short code, please retry"}), 500)
 
         Event.create(
             url=url_record,
             user=user_id,
             event_type="created",
-            details=json.dumps({"short_code": short_code, "original_url": original_url}),
+            details=json.dumps({"short_code": url_record.short_code, "original_url": original_url}),
         )
-    except DatabaseError:
-        logger.exception("Database error in POST /shorten")
-        return _unavailable()
+    except _DB_ERRORS:
+        logger.exception("Database error creating URL")
+        return None, _unavailable()
 
+    return url_record, None
+
+
+@urls_bp.route("/shorten", methods=["POST"])
+def shorten():
+    data = request.get_json(silent=True) or {}
+    original_url = data.get("url", "").strip()
+    url_record, err = _create_url(original_url, data.get("title"), data.get("user_id"))
+    if err:
+        return err
+    return jsonify(model_to_dict(url_record, backrefs=False)), 201
+
+
+@urls_bp.route("/urls", methods=["POST"])
+def create_url():
+    data = request.get_json(silent=True) or {}
+    original_url = data.get("original_url", "").strip()
+    url_record, err = _create_url(original_url, data.get("title"), data.get("user_id"))
+    if err:
+        return err
     return jsonify(model_to_dict(url_record, backrefs=False)), 201
 
 
@@ -83,7 +99,7 @@ def redirect_url(short_code):
             url_record = ShortenedURL.get(ShortenedURL.short_code == short_code)
         except DoesNotExist:
             return jsonify({"error": "URL not found"}), 404
-        except DatabaseError:
+        except _DB_ERRORS:
             logger.exception("Database error in GET /<short_code>")
             return _unavailable()
 
@@ -98,8 +114,7 @@ def redirect_url(short_code):
         ShortenedURL.update(click_count=ShortenedURL.click_count + 1).where(
             ShortenedURL.short_code == short_code
         ).execute()
-    except DatabaseError:
-        # Non-fatal: log and continue so the redirect still works.
+    except _DB_ERRORS:
         logger.warning("Failed to increment click_count for %s", short_code)
 
     response = redirect(original_url, code=302)
@@ -111,13 +126,19 @@ def redirect_url(short_code):
 def list_urls():
     try:
         query = ShortenedURL.select()
-        active_param = request.args.get("active")
+
+        active_param = request.args.get("active") or request.args.get("is_active")
         if active_param == "true":
             query = query.where(ShortenedURL.is_active == True)
         elif active_param == "false":
             query = query.where(ShortenedURL.is_active == False)
+
+        user_id = request.args.get("user_id", type=int)
+        if user_id is not None:
+            query = query.where(ShortenedURL.user == user_id)
+
         return jsonify([model_to_dict(u, backrefs=False) for u in query]), 200
-    except DatabaseError:
+    except _DB_ERRORS:
         logger.exception("Database error in GET /urls")
         return _unavailable()
 
@@ -128,7 +149,7 @@ def get_url(url_id):
         url_record = ShortenedURL.get_by_id(url_id)
     except DoesNotExist:
         return jsonify({"error": "URL not found"}), 404
-    except DatabaseError:
+    except _DB_ERRORS:
         logger.exception("Database error in GET /urls/%s", url_id)
         return _unavailable()
     return jsonify(model_to_dict(url_record, backrefs=False)), 200
@@ -140,7 +161,7 @@ def update_url(url_id):
         url_record = ShortenedURL.get_by_id(url_id)
     except DoesNotExist:
         return jsonify({"error": "URL not found"}), 404
-    except DatabaseError:
+    except _DB_ERRORS:
         logger.exception("Database error in PUT /urls/%s", url_id)
         return _unavailable()
 
@@ -160,7 +181,7 @@ def update_url(url_id):
             event_type="updated",
             details=json.dumps(data),
         )
-    except DatabaseError:
+    except _DB_ERRORS:
         logger.exception("Database error saving PUT /urls/%s", url_id)
         return _unavailable()
 
@@ -174,19 +195,15 @@ def delete_url(url_id):
         url_record = ShortenedURL.get_by_id(url_id)
     except DoesNotExist:
         return jsonify({"error": "URL not found"}), 404
-    except DatabaseError:
+    except _DB_ERRORS:
         logger.exception("Database error in DELETE /urls/%s", url_id)
         return _unavailable()
 
     try:
         url_record.is_active = False
         url_record.save()
-
-        Event.create(
-            url=url_record,
-            event_type="deleted",
-        )
-    except DatabaseError:
+        Event.create(url=url_record, event_type="deleted")
+    except _DB_ERRORS:
         logger.exception("Database error saving DELETE /urls/%s", url_id)
         return _unavailable()
 
