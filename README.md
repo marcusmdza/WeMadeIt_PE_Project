@@ -67,6 +67,11 @@ mlh-pe-hackathon/
 │   │   └── __init__.py      # Import your models here
 │   └── routes/
 │       └── __init__.py      # register_routes() — add blueprints here
+├── seeds/                   # CSV seed files (see below)
+│   ├── users.csv
+│   ├── urls.csv
+│   └── events.csv
+├── seed.py                  # Drop/recreate tables and load CSVs: python seed.py
 ├── .env.example             # DB connection template
 ├── .gitignore               # Python + uv gitignore
 ├── .python-version          # Pin Python version for uv
@@ -74,6 +79,24 @@ mlh-pe-hackathon/
 ├── run.py                   # Entry point: uv run run.py
 └── README.md
 ```
+
+## Seed Data
+
+Place your CSV files in the `seeds/` directory before running the seeder:
+
+| File | Columns |
+|------|---------|
+| `seeds/users.csv` | `id`, `username`, `email`, `created_at` |
+| `seeds/urls.csv` | `id`, `user_id`, `short_code`, `original_url`, `title`, `is_active`, `created_at`, `updated_at` |
+| `seeds/events.csv` | `id`, `url_id`, `user_id`, `event_type`, `timestamp`, `details` |
+
+Download the CSV files from the [MLH PE Hackathon](https://mlh-pe-hackathon.com) platform, then run:
+
+```bash
+python seed.py
+```
+
+This will **drop and recreate** the `Event`, `ShortenedURL`, and `User` tables, then bulk-insert all rows.
 
 ## How to Add a Model
 
