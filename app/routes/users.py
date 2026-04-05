@@ -135,10 +135,15 @@ def bulk_load_users():
         with db.atomic():
             for batch in chunked(rows, 100):
                 User.insert_many(batch).execute()
+        db.execute_sql(
+            'SELECT setval(pg_get_serial_sequence(\'\"user\"\', \'id\'), '
+            '(SELECT COALESCE(MAX(id), 0) FROM "user"))'
+        )
     except IntegrityError:
         return jsonify({"error": "Duplicate username or email in CSV"}), 409
     except _DB_ERRORS:
         logger.exception("Database error in POST /users/bulk")
         return _unavailable()
 
-    return jsonify({"message": f"{len(rows)} users loaded"}), 201
+    count = len(rows)
+    return jsonify({"message": f"{count} users loaded", "count": count}), 201

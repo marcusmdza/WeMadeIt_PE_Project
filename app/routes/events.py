@@ -34,7 +34,13 @@ def list_events():
         if event_type:
             query = query.where(Event.event_type == event_type)
 
-        return jsonify([model_to_dict(e, backrefs=False) for e in query]), 200
+        results = []
+        for e in query:
+            d = model_to_dict(e, backrefs=False)
+            d["url_id"] = e.url_id
+            d["user_id"] = e.user_id
+            results.append(d)
+        return jsonify(results), 200
     except _DB_ERRORS:
         logger.exception("Database error in GET /events")
         return _unavailable()
@@ -67,4 +73,7 @@ def create_event():
         logger.exception("Database error in POST /events")
         return _unavailable()
 
-    return jsonify(model_to_dict(event, backrefs=False)), 201
+    d = model_to_dict(event, backrefs=False)
+    d["url_id"] = event.url_id
+    d["user_id"] = event.user_id
+    return jsonify(d), 201

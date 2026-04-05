@@ -137,7 +137,12 @@ def list_urls():
         if user_id is not None:
             query = query.where(ShortenedURL.user == user_id)
 
-        return jsonify([model_to_dict(u, backrefs=False) for u in query]), 200
+        results = []
+        for u in query:
+            d = model_to_dict(u, backrefs=False)
+            d["user_id"] = u.user_id
+            results.append(d)
+        return jsonify(results), 200
     except _DB_ERRORS:
         logger.exception("Database error in GET /urls")
         return _unavailable()
@@ -152,7 +157,9 @@ def get_url(url_id):
     except _DB_ERRORS:
         logger.exception("Database error in GET /urls/%s", url_id)
         return _unavailable()
-    return jsonify(model_to_dict(url_record, backrefs=False)), 200
+    d = model_to_dict(url_record, backrefs=False)
+    d["user_id"] = url_record.user_id
+    return jsonify(d), 200
 
 
 @urls_bp.route("/urls/<int:url_id>", methods=["PUT"])
