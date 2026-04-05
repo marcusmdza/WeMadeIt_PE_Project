@@ -7,6 +7,8 @@ from peewee import DoesNotExist, IntegrityError, InterfaceError, OperationalErro
 from playhouse.shortcuts import model_to_dict
 
 from app.database import db
+from app.models.event import Event
+from app.models.url import ShortenedURL
 from app.models.user import User
 
 users_bp = Blueprint("users", __name__)
@@ -139,6 +141,8 @@ def delete_user(user_id):
         return _unavailable()
 
     try:
+        ShortenedURL.update(user=None).where(ShortenedURL.user == user_id).execute()
+        Event.update(user=None).where(Event.user == user_id).execute()
         user.delete_instance()
     except _DB_ERRORS:
         logger.exception("Database error deleting /users/%s", user_id)

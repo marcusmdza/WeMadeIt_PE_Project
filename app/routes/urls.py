@@ -60,6 +60,7 @@ def _create_url(original_url, title=None, user_id=None):
         existing = ShortenedURL.get_or_none(
             ShortenedURL.original_url == original_url,
             ShortenedURL.user == user_id,
+            ShortenedURL.title == title,
         )
         if existing:
             return existing, 200, None
