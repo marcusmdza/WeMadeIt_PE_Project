@@ -74,8 +74,13 @@ def create_user():
     if err:
         return err
     data = request.get_json()
-    username = (data.get("username") or "").strip()
-    email = (data.get("email") or "").strip()
+    raw_username = data.get("username")
+    raw_email = data.get("email")
+    if not isinstance(raw_username, str) or not isinstance(raw_email, str):
+        return jsonify({"error": "Username and email must be strings"}), 400
+
+    username = raw_username.strip()
+    email = raw_email.strip()
 
     if not username or not email:
         return jsonify({"error": "Username and email are required"}), 400

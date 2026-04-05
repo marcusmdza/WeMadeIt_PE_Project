@@ -57,14 +57,6 @@ def _create_url(original_url, title=None, user_id=None):
 
     # Hint 1: return existing record if same original_url + user_id already exists
     try:
-        existing = ShortenedURL.get_or_none(
-            ShortenedURL.original_url == original_url,
-            ShortenedURL.user == user_id,
-            ShortenedURL.title == title,
-        )
-        if existing:
-            return existing, 200, None
-
         url_record = None
         for _ in range(3):
             short_code = _generate_short_code()
