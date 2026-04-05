@@ -58,7 +58,7 @@ def _create_url(original_url, title=None, user_id=None):
     # Hint 3: validate user exists if provided
     if user_id is not None:
         if User.get_or_none(User.id == user_id) is None:
-            return None, None, (jsonify({"error": "User not found"}), 404)
+            return None, None, (jsonify({"error": "User not found"}), 400)
 
     # Hint 1: return existing record if same original_url + user_id already exists
     try:
