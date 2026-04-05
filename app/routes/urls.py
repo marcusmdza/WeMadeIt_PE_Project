@@ -222,6 +222,9 @@ def update_url(url_id):
             url_record.original_url = data["original_url"]
         if "is_active" in data:
             url_record.is_active = data["is_active"]
+            if data["is_active"] is False:
+                url_record.click_count = 0
+                Event.delete().where(Event.url == url_record, Event.event_type == "click").execute()
         url_record.updated_at = datetime.datetime.now()
         url_record.save()
 
@@ -250,7 +253,9 @@ def delete_url(url_id):
 
     try:
         url_record.is_active = False
+        url_record.click_count = 0
         url_record.save()
+        Event.delete().where(Event.url == url_record, Event.event_type == "click").execute()
         Event.create(url=url_record, event_type="deleted")
     except _DB_ERRORS:
         logger.exception("Database error saving DELETE /urls/%s", url_id)
