@@ -67,7 +67,7 @@ def create_app():
 
     @app.errorhandler(500)
     def internal_error(e):
-        app.logger.error(e)
+        app.logger.error("Unhandled exception", exc_info=e)
         return jsonify({"error": "Internal server error"}), 500
 
     @app.route("/health")
