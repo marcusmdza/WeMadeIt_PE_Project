@@ -50,6 +50,11 @@ def _create_url(original_url, title=None, user_id=None):
     if not original_url.startswith(("http://", "https://")):
         return None, None, (jsonify({"error": "URL must start with http:// or https://"}), 400)
 
+    if user_id is not None and not isinstance(user_id, int):
+        return None, None, (jsonify({"error": "Invalid user_id"}), 400)
+    if title is not None and not isinstance(title, str):
+        return None, None, (jsonify({"error": "Invalid title"}), 400)
+
     # Hint 3: validate user exists if provided
     if user_id is not None:
         if User.get_or_none(User.id == user_id) is None:
@@ -93,7 +98,10 @@ def shorten():
     if err:
         return err
     data = request.get_json()
-    original_url = (data.get("url") or "").strip()
+    raw_url = data.get("url")
+    if not isinstance(raw_url, str):
+        return jsonify({"error": "URL is required"}), 400
+    original_url = raw_url.strip()
     url_record, status, err = _create_url(original_url, data.get("title"), data.get("user_id"))
     if err:
         return err
@@ -106,7 +114,10 @@ def create_url():
     if err:
         return err
     data = request.get_json()
-    original_url = (data.get("original_url") or "").strip()
+    raw_url = data.get("original_url")
+    if not isinstance(raw_url, str):
+        return jsonify({"error": "URL is required"}), 400
+    original_url = raw_url.strip()
     url_record, status, err = _create_url(original_url, data.get("title"), data.get("user_id"))
     if err:
         return err
