@@ -1,20 +1,53 @@
+import logging
+import time
+
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import Flask, g, jsonify, request
 
 from app.database import init_db
+from app.logging_config import configure_logging
 from app.routes import register_routes
+
+logger = logging.getLogger(__name__)
 
 
 def create_app():
     load_dotenv()
+    configure_logging()
 
     app = Flask(__name__)
+
+    app.config["APP_START_TIME"] = time.time()
+    app.config["TOTAL_REQUESTS"] = 0
+    app.config["TOTAL_ERRORS"] = 0
 
     init_db(app)
 
     from app import models  # noqa: F401 - registers models with Peewee
 
     register_routes(app)
+
+    @app.before_request
+    def _record_start_time():
+        g.start_time = time.time()
+
+    @app.after_request
+    def _log_request(response):
+        app.config["TOTAL_REQUESTS"] += 1
+        if response.status_code >= 400:
+            app.config["TOTAL_ERRORS"] += 1
+
+        duration_ms = round((time.time() - g.start_time) * 1000, 2)
+        logger.info(
+            "request",
+            extra={
+                "method": request.method,
+                "path": request.path,
+                "status": response.status_code,
+                "duration_ms": duration_ms,
+            },
+        )
+        return response
 
     @app.errorhandler(400)
     def bad_request(e):

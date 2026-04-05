@@ -1,6 +1,6 @@
 import datetime
 
-from peewee import AutoField, BooleanField, CharField, DateTimeField, ForeignKeyField, TextField
+from peewee import AutoField, BooleanField, CharField, DateTimeField, ForeignKeyField, IntegerField, TextField
 
 from app.database import BaseModel
 from app.models.user import User
@@ -13,5 +13,6 @@ class ShortenedURL(BaseModel):
     original_url = TextField()
     title = CharField(max_length=255, null=True)
     is_active = BooleanField(default=True)
+    click_count = IntegerField(default=0)
     created_at = DateTimeField(default=datetime.datetime.now)
     updated_at = DateTimeField(default=datetime.datetime.now)

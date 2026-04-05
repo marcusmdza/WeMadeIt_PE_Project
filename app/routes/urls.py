@@ -59,6 +59,10 @@ def redirect_url(short_code):
     if not url_record.is_active:
         return jsonify({"error": "This URL is no longer active"}), 410
 
+    ShortenedURL.update(click_count=ShortenedURL.click_count + 1).where(
+        ShortenedURL.short_code == short_code
+    ).execute()
+
     return redirect(url_record.original_url, code=302)
 
 
