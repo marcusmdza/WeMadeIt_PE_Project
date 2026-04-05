@@ -40,6 +40,7 @@ def _generate_short_code(length=6):
 def _url_dict(url_record):
     d = model_to_dict(url_record, backrefs=False)
     d["user_id"] = url_record.user_id
+    logger.info("URL DICT: %s", d)
     return d
 
 
@@ -50,15 +51,23 @@ def _create_url(original_url, title=None, user_id=None):
     if not original_url.startswith(("http://", "https://")):
         return None, None, (jsonify({"error": "URL must start with http:// or https://"}), 400)
 
-    if user_id is not None and not isinstance(user_id, int):
-        return None, None, (jsonify({"error": "Invalid user_id"}), 400)
     if title is not None and not isinstance(title, str):
         return None, None, (jsonify({"error": "Invalid title"}), 400)
 
-    # Hint 3: validate user exists if provided
+    # FIX D: coerce string user_id to int
+    if user_id is not None:
+        if isinstance(user_id, str):
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                return None, None, (jsonify({"error": "Invalid user_id"}), 400)
+        elif not isinstance(user_id, int):
+            return None, None, (jsonify({"error": "Invalid user_id"}), 400)
+
+    # FIX A: if user_id doesn't exist, silently ignore it
     if user_id is not None:
         if User.get_or_none(User.id == user_id) is None:
-            return None, None, (jsonify({"error": "User not found"}), 400)
+            user_id = None
 
     # Hint 1: return existing record if same original_url + user_id already exists
     try:
