@@ -5,7 +5,7 @@ import random
 import string
 
 from flask import Blueprint, jsonify, redirect, request
-from peewee import DoesNotExist, ForeignKeyField, IntegrityError, InterfaceError, OperationalError
+from peewee import DoesNotExist, IntegrityError, InterfaceError, OperationalError
 from playhouse.shortcuts import model_to_dict
 
 from app.cache import cache_url, get_cached_url, invalidate_url
@@ -38,8 +38,9 @@ def _generate_short_code(length=6):
 
 
 def _url_dict(url_record):
-    d = model_to_dict(url_record, backrefs=False, exclude=[ShortenedURL.user])
+    d = model_to_dict(url_record, backrefs=False)
     d["user_id"] = url_record.user_id
+    d["url"] = url_record.original_url
     return d
 
 
