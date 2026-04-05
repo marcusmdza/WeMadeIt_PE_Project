@@ -8,6 +8,7 @@ from flask import Blueprint, jsonify, redirect, request
 from peewee import DatabaseError, DoesNotExist, IntegrityError
 from playhouse.shortcuts import model_to_dict
 
+from app.cache import cache_url, get_cached_url, invalidate_url
 from app.models.event import Event
 from app.models.url import ShortenedURL
 
@@ -70,15 +71,27 @@ def shorten():
 
 @urls_bp.route("/<short_code>", methods=["GET"])
 def redirect_url(short_code):
-    try:
-        url_record = ShortenedURL.get(ShortenedURL.short_code == short_code)
-    except DoesNotExist:
-        return jsonify({"error": "URL not found"}), 404
-    except DatabaseError:
-        logger.exception("Database error in GET /<short_code>")
-        return _unavailable()
+    cache_hit = False
+    cached = get_cached_url(short_code)
 
-    if not url_record.is_active:
+    if cached:
+        original_url = cached["original_url"]
+        is_active = cached["is_active"]
+        cache_hit = True
+    else:
+        try:
+            url_record = ShortenedURL.get(ShortenedURL.short_code == short_code)
+        except DoesNotExist:
+            return jsonify({"error": "URL not found"}), 404
+        except DatabaseError:
+            logger.exception("Database error in GET /<short_code>")
+            return _unavailable()
+
+        original_url = url_record.original_url
+        is_active = url_record.is_active
+        cache_url(short_code, {"original_url": original_url, "is_active": is_active})
+
+    if not is_active:
         return jsonify({"error": "This URL is no longer active"}), 410
 
     try:
@@ -89,7 +102,9 @@ def redirect_url(short_code):
         # Non-fatal: log and continue so the redirect still works.
         logger.warning("Failed to increment click_count for %s", short_code)
 
-    return redirect(url_record.original_url, code=302)
+    response = redirect(original_url, code=302)
+    response.headers["X-Cache"] = "HIT" if cache_hit else "MISS"
+    return response
 
 
 @urls_bp.route("/urls", methods=["GET"])
@@ -149,6 +164,7 @@ def update_url(url_id):
         logger.exception("Database error saving PUT /urls/%s", url_id)
         return _unavailable()
 
+    invalidate_url(url_record.short_code)
     return jsonify(model_to_dict(url_record, backrefs=False)), 200
 
 
@@ -174,4 +190,5 @@ def delete_url(url_id):
         logger.exception("Database error saving DELETE /urls/%s", url_id)
         return _unavailable()
 
+    invalidate_url(url_record.short_code)
     return jsonify({"message": "URL deleted"}), 200

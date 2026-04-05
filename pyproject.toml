@@ -11,6 +11,7 @@ dependencies = [
     "python-json-logger>=2.0",
     "gunicorn>=23.0",
     "locust>=2.0",
+    "redis>=5.0",
 ]
 
 [dependency-groups]

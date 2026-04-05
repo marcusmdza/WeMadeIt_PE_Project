@@ -4,8 +4,10 @@ import time
 from dotenv import load_dotenv
 from flask import Flask, g, jsonify, request
 
+from app.alerts import record_error_and_maybe_alert, register_cli
 from app.database import init_db
 from app.logging_config import configure_logging
+from app.metrics_store import record_request
 from app.routes import register_routes
 
 logger = logging.getLogger(__name__)
@@ -31,20 +33,27 @@ def create_app():
     def _record_start_time():
         g.start_time = time.time()
 
+    register_cli(app)
+
     @app.after_request
     def _log_request(response):
         app.config["TOTAL_REQUESTS"] += 1
         if response.status_code >= 400:
             app.config["TOTAL_ERRORS"] += 1
+            record_error_and_maybe_alert()
 
-        duration_ms = round((time.time() - g.start_time) * 1000, 2)
+        duration_s = time.time() - g.start_time
+        # Normalise path to URL rule to avoid high-cardinality labels like /urls/123
+        path = str(request.url_rule) if request.url_rule else request.path
+        record_request(request.method, path, response.status_code, duration_s)
+
         logger.info(
             "request",
             extra={
                 "method": request.method,
                 "path": request.path,
                 "status": response.status_code,
-                "duration_ms": duration_ms,
+                "duration_ms": round(duration_s * 1000, 2),
             },
         )
         return response
