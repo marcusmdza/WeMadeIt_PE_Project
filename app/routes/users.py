@@ -27,6 +27,16 @@ def _require_json():
     return None
 
 
+def _validate_email(email):
+    """Return an error response tuple if email is not valid, else None."""
+    if "@" not in email:
+        return jsonify({"error": "Invalid email format"}), 400
+    local, _, domain = email.partition("@")
+    if not local or "." not in domain:
+        return jsonify({"error": "Invalid email format"}), 400
+    return None
+
+
 @users_bp.route("/users", methods=["GET"])
 def list_users():
     try:
@@ -68,6 +78,10 @@ def create_user():
     if not username or not email:
         return jsonify({"error": "Username and email are required"}), 400
 
+    err = _validate_email(email)
+    if err:
+        return err
+
     try:
         user = User.create(username=username, email=email)
     except IntegrityError:
@@ -93,6 +107,10 @@ def update_user(user_id):
         return _unavailable()
 
     data = request.get_json()
+    if "email" in data:
+        err = _validate_email((data.get("email") or "").strip())
+        if err:
+            return err
     try:
         if "username" in data:
             user.username = data["username"]
