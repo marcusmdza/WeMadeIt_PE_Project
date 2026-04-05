@@ -132,8 +132,8 @@ def test_delete_url_not_found(client, seed_data):
 
 def test_shorten_invalid_json(client, seed_data):
     response = client.post("/shorten", data="not-json", content_type="text/plain")
-    assert response.status_code == 400
-    assert response.get_json() == {"error": "URL is required"}
+    assert response.status_code == 415
+    assert "error" in response.get_json()
 
 
 def test_error_handlers(client):

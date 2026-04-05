@@ -2,10 +2,12 @@ import json
 import logging
 
 from flask import Blueprint, jsonify, request
-from peewee import DoesNotExist, InterfaceError, OperationalError
+from peewee import InterfaceError, OperationalError
 from playhouse.shortcuts import model_to_dict
 
 from app.models.event import Event
+from app.models.url import ShortenedURL
+from app.models.user import User
 
 events_bp = Blueprint("events", __name__)
 logger = logging.getLogger(__name__)
@@ -15,6 +17,14 @@ _DB_ERRORS = (OperationalError, InterfaceError)
 
 def _unavailable():
     return jsonify({"error": "Service temporarily unavailable"}), 503
+
+
+def _require_json():
+    if not request.content_type or "application/json" not in request.content_type:
+        return jsonify({"error": "Content-Type must be application/json"}), 415
+    if request.get_json(silent=True) is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    return None
 
 
 @events_bp.route("/events", methods=["GET"])
@@ -48,7 +58,10 @@ def list_events():
 
 @events_bp.route("/events", methods=["POST"])
 def create_event():
-    data = request.get_json(silent=True) or {}
+    err = _require_json()
+    if err:
+        return err
+    data = request.get_json()
 
     event_type = data.get("event_type", "").strip()
     if not event_type:
@@ -58,9 +71,19 @@ def create_event():
     user_id = data.get("user_id")
     details = data.get("details")
 
-    # Accept details as a dict and serialize to JSON string, or pass through as-is
+    # Hint 5: details must be a dict if provided
+    if details is not None and not isinstance(details, dict):
+        return jsonify({"error": "Details must be a JSON object"}), 400
     if isinstance(details, dict):
         details = json.dumps(details)
+
+    # Hint 3: validate FK existence
+    if url_id is not None:
+        if ShortenedURL.get_or_none(ShortenedURL.id == url_id) is None:
+            return jsonify({"error": "URL not found"}), 404
+    if user_id is not None:
+        if User.get_or_none(User.id == user_id) is None:
+            return jsonify({"error": "User not found"}), 404
 
     try:
         event = Event.create(

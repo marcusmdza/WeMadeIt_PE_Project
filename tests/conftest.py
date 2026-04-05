@@ -56,6 +56,11 @@ def seed_data(test_app):
     """Insert a sample user and two URLs; clean up after each test."""
     from app.database import db
 
+    # Flush stale cache entries so a previous test run's IDs don't leak in.
+    from app.cache import invalidate_url
+    invalidate_url("test01")
+    invalidate_url("dead01")
+
     db.connect(reuse_if_open=True)
 
     user = User.create(username="testuser", email="test@example.com")

@@ -19,6 +19,14 @@ def _unavailable():
     return jsonify({"error": "Service temporarily unavailable"}), 503
 
 
+def _require_json():
+    if not request.content_type or "application/json" not in request.content_type:
+        return jsonify({"error": "Content-Type must be application/json"}), 415
+    if request.get_json(silent=True) is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    return None
+
+
 @users_bp.route("/users", methods=["GET"])
 def list_users():
     try:
@@ -50,14 +58,15 @@ def get_user(user_id):
 
 @users_bp.route("/users", methods=["POST"])
 def create_user():
-    data = request.get_json(silent=True) or {}
-    username = data.get("username", "").strip()
-    email = data.get("email", "").strip()
+    err = _require_json()
+    if err:
+        return err
+    data = request.get_json()
+    username = (data.get("username") or "").strip()
+    email = (data.get("email") or "").strip()
 
-    if not username:
-        return jsonify({"error": "username is required"}), 400
-    if not email:
-        return jsonify({"error": "email is required"}), 400
+    if not username or not email:
+        return jsonify({"error": "Username and email are required"}), 400
 
     try:
         user = User.create(username=username, email=email)
@@ -72,6 +81,9 @@ def create_user():
 
 @users_bp.route("/users/<int:user_id>", methods=["PUT"])
 def update_user(user_id):
+    err = _require_json()
+    if err:
+        return err
     try:
         user = User.get_by_id(user_id)
     except DoesNotExist:
@@ -80,7 +92,7 @@ def update_user(user_id):
         logger.exception("Database error in PUT /users/%s", user_id)
         return _unavailable()
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json()
     try:
         if "username" in data:
             user.username = data["username"]
