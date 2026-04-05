@@ -78,6 +78,8 @@ def create_user():
     if not username or not email:
         return jsonify({"error": "Username and email are required"}), 400
 
+    email = email.lower()
+
     err = _validate_email(email)
     if err:
         return err
